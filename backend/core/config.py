@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, ge=1, le=65535)
     frontend_origin: str = "http://localhost:3000"
     database_url: str = "postgresql+asyncpg://rag_dev:change-me@localhost:5432/rag_dev"
-    redis_url: str = "redis://:change-me@localhost:6379/0"
+    migration_database_url: str = (
+    "postgresql+psycopg://rag_migration_admin:change-me-migration@localhost:5432/rag_dev"
+)
+
+    redis_url: str = "redis://:change-me@localhost:6380/0"
     jwt_secret_key: str = "development-only-secret-change-me-please"
 
     @property
