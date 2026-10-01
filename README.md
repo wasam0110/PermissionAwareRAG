@@ -8,7 +8,7 @@ This repository currently implements the **Stage 0 project foundation** only. Au
 
 ## Technology
 
-- Backend: Python 3.12, FastAPI, Uvicorn, Pydantic Settings, SQLAlchemy, Alembic
+- Backend: Python 3.11, FastAPI, Uvicorn, Pydantic Settings, SQLAlchemy, Alembic
 - Data services: PostgreSQL 16 with pgvector, Redis 7
 - Frontend: Next.js 14 App Router, TypeScript
 - Quality: pytest, Ruff, mypy, ESLint, Vitest

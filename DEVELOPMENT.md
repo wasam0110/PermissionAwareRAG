@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.11+
 - Node.js 20+
 - Docker Engine and Docker Compose for PostgreSQL and Redis
 
@@ -16,7 +16,7 @@ cp .env.example .env
 ## Backend
 
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -r backend/requirements-dev.txt
 alembic -c alembic.ini upgrade head

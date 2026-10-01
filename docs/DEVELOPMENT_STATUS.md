@@ -2,7 +2,7 @@
 
 ## Implemented
 
-The repository foundation is implemented as a standalone project. It includes the FastAPI backend, Pydantic Settings configuration, structured JSON logging with correlation IDs, `/health` and `/ready`, SQLAlchemy/Alembic wiring, local PostgreSQL 16 with pgvector and Redis 7 Compose templates, a Next.js 14 App Router skeleton, reserved application routes, tests, and CI configuration.
+The repository foundation is implemented as a standalone project using Python 3.11 for the backend runtime, CI, and container image. It includes the FastAPI backend, Pydantic Settings configuration, structured JSON logging with correlation IDs, `/health` and `/ready`, SQLAlchemy/Alembic wiring, local PostgreSQL 16 with pgvector and Redis 7 Compose templates, a Next.js 14 App Router skeleton, reserved application routes, tests, and CI configuration.
 
 The required governance documents are available at the repository root and mirrored under `docs/` for organized project documentation.
 
