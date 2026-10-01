@@ -1,0 +1,22 @@
+# Architecture Decisions
+
+## ADR-0001 — Standalone project dependencies
+
+- Date: 2026-10-01
+- Decision: Use standard open-source/runtime dependencies only; do not add Manus SDKs, MCP packages, Manus APIs, or hosted-runtime assumptions.
+- Reason: The project must be portable and independently deployable.
+- Consequence: Integrations use ordinary environment variables and documented adapters.
+
+## ADR-0002 — Stage-gated implementation
+
+- Date: 2026-10-01
+- Decision: Implement one PRD stage at a time and block progression until its acceptance criteria pass.
+- Reason: Security boundaries must exist before higher-level features depend on them.
+- Consequence: Stage 0 contains no auth, RLS, ingestion, or RAG.
+
+## ADR-0003 — Patched Next.js 14 release
+
+- Date: 2026-10-01
+- Decision: Use Next.js 14.2.35, the latest available release in the required Next.js 14 line.
+- Reason: The initial 14.2.21 dependency emitted a security warning during installation.
+- Consequence: The project remains on the PRD’s Next.js 14 line while avoiding the known warning.

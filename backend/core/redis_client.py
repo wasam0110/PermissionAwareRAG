@@ -1,0 +1,24 @@
+from redis.asyncio import Redis
+
+from backend.core.config import get_settings
+
+_client: Redis | None = None
+
+
+def get_redis() -> Redis:
+    global _client
+    if _client is None:
+        _client = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    return _client
+
+
+async def check_redis() -> bool:
+    try:
+        return bool(await get_redis().ping())
+    except Exception:
+        return False
+
+
+async def close_redis() -> None:
+    if _client is not None:
+        await _client.aclose()

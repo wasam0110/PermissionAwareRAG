@@ -1,0 +1,1 @@
+Alembic migration directory. Stage 0 intentionally contains no security schema; Stage 1 adds the tenant-isolation schema and RLS policies.
