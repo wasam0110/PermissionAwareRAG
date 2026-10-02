@@ -2,6 +2,9 @@
 -- These passwords are development placeholders only.
 -- Replace them for any shared or production environment.
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE ROLE rag_migration_admin
     LOGIN
     PASSWORD 'change-me-migration'

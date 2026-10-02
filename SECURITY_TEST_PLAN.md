@@ -1,317 +1,169 @@
 # Security Test Plan
 
+## Purpose
+
+Verify that security boundaries are implemented before dependent features are added. Each stage requires tests, quality checks, security verification, and documentation updates.
+
 ## Current Status
 
-**Stage 0 — COMPLETE**
+- **Stage 0:** Complete
+- **Stage 1:** Database schema, roles, RLS, and initial isolation tests implemented; expanded coverage pending
+- **Stages 2–10:** Planned
 
-**Stage 1 — TEST PLAN DEFINED / IMPLEMENTATION NOT YET COMPLETE**
+Authentication, document ingestion, permission-aware retrieval, RAG, LLM security, and production deployment are not yet implemented.
 
-Testing is stage-gated.
+## Test Environment
 
-A stage cannot be considered complete based only on implementation claims. Required tests must pass before the completion gate is marked complete.
+| Service | Host port | Container port |
+|---|---:|---:|
+| PostgreSQL 16 + pgvector | `5433` | `5432` |
+| Redis 7 | `6380` | `6379` |
 
----
+Database roles:
 
-# Stage 0 Tests
+- `rag_dev` — local bootstrap/admin role
+- `rag_migration_admin` — migration role
+- `rag_app` — restricted application role
 
-## Application Health
+The application role must not be a superuser or have `BYPASSRLS`.
 
-Verify:
+## Stage 0 Verification
 
-```text
-GET /health
-```
-
-returns HTTP `200`:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-This verifies process liveness only.
-
----
-
-## Dependency Readiness
-
-Verify:
+Passed:
 
 ```text
-GET /ready
+pytest                         5 passed
+ruff check backend tests       Passed
+mypy backend                   Passed
+Frontend lint                  Passed
+Frontend tests                 Passed
+Frontend production build      Passed
+Docker service health          Passed
+PostgreSQL connectivity        Passed
+Redis connectivity             Passed
 ```
 
-reports PostgreSQL and Redis availability.
+A Starlette/httpx deprecation warning remains non-blocking.
 
-When both dependencies are healthy:
+## Stage 1 Database Tests
 
-```json
-{
-  "status": "ready",
-  "dependencies": {
-    "database": true,
-    "redis": true
-  }
-}
+Run the initial RLS suite:
+
+```powershell
+pytest tests/security/test_rls_isolation.py -q
 ```
 
-If either dependency is unavailable, the endpoint must return HTTP `503`.
+Current tests verify:
 
----
+- Missing tenant context returns no tenant-owned rows
+- Tenant A can read its own document
+- Tenant A cannot read Tenant B’s document
+- Tenant A cannot update Tenant B’s document
+- Tenant A cannot delete Tenant B’s document
 
-## Configuration
-
-Verify:
-
-- settings load successfully
-- environment variables override defaults
-- application startup succeeds
-- PostgreSQL configuration loads
-- Redis configuration loads
-- no credentials are exposed through frontend configuration
-
----
-
-## Correlation IDs
-
-Verify:
-
-- incoming `X-Request-ID` is preserved
-- a correlation ID is generated when one is absent
-- the correlation ID is returned in the response
-- correlation IDs are not treated as authentication credentials
-
----
-
-## Secret Exposure
-
-Verify:
-
-- no real secrets exist in frontend source
-- health responses contain no credentials
-- readiness responses contain no credentials
-- readiness responses contain no connection strings
-- logs do not contain request bodies
-- logs do not contain credentials
-- logs do not contain authorization tokens
-
----
-
-# Stage 0 Quality Checks
-
-The completed Stage 0 implementation passes:
+Expected result:
 
 ```text
-pytest
-5 passed
-
-ruff check backend tests
-All checks passed
-
-mypy backend
-Success: no issues found
-
-Frontend lint
-Passed
-
-Frontend tests
-1 passed
-
-Frontend production build
-Passed
+4 passed
 ```
 
----
+## Required Database Checks
 
-# Stage 1 Security Tests
+Verify migration state:
 
-Stage 1 must add tests for database-level tenant isolation.
-
-## Schema Tests
-
-Verify:
-
-- required tables exist
-- tenant-owned tables contain `tenant_id`
-- tenant-owned `tenant_id` columns are non-null
-- required foreign keys exist
-- required unique constraints exist
-- required indexes exist
-- document/chunk relationships preserve tenant ownership
-
----
-
-## Database Role Tests
-
-Verify:
-
-```text
-rag_app
-    superuser = false
-    BYPASSRLS = false
+```powershell
+alembic -c alembic.ini current
 ```
 
-The application role must not be able to bypass RLS.
-
----
-
-## RLS Enablement
-
-Verify that RLS is enabled on every tenant-owned table.
-
----
-
-## Tenant Context
-
-Verify that a trusted tenant context can be established for a transaction.
-
-Conceptually:
+Verify RLS:
 
 ```sql
-SET LOCAL app.tenant_id = '<tenant-a>';
+SELECT relname, relrowsecurity, relforcerowsecurity
+FROM pg_class
+WHERE relname IN (
+    'tenants',
+    'users',
+    'roles',
+    'user_roles',
+    'role_permissions',
+    'collections',
+    'documents',
+    'document_acl',
+    'chunks',
+    'sessions',
+    'refresh_tokens',
+    'audit_events'
+)
+ORDER BY relname;
 ```
 
-Verify that tenant context is transaction-local and cannot leak between pooled connections.
-
----
-
-## Missing Tenant Context
-
-Verify that no tenant-owned data is accessible when tenant context is absent.
-
-Expected behavior:
+Every tenant-owned table must show:
 
 ```text
-No tenant context
-        ↓
-No tenant-owned data accessible
+relrowsecurity      = true
+relforcerowsecurity = true
 ```
 
----
+## Stage 1 Remaining Tests
 
-## Same-Tenant Access
+Add coverage for:
 
-Verify that a tenant can access its own permitted resources.
+- Users
+- Roles
+- Collections
+- Document ACLs
+- Chunks and vectors
+- Sessions
+- Refresh tokens
+- Audit events
+- `role_permissions` tenant derivation
+- Mismatched-tenant inserts
+- Tenant-context switching
+- Context reset after transaction completion
+- Deleted-resource exclusion
+- Application-role privilege restrictions
+- Database constraints and indexes
 
-Example:
+## Stage 2–10 Test Areas
 
-```text
-Tenant A context
-        ↓
-Tenant A document
-        ↓
-Accessible
+Future stages must cover:
+
+- Authentication, sessions, MFA, and RBAC/ABAC
+- Secure uploads and ingestion
+- Permission-aware retrieval
+- Prompt injection and retrieval poisoning
+- LLM output protection
+- Frontend security
+- HTTPS, headers, and accessibility
+- Privacy, consent, and abuse controls
+- Production infrastructure and secrets
+- Observability, audit, backup, restore, and disaster recovery
+
+## Quality Commands
+
+Backend:
+
+```powershell
+pytest
+ruff check backend tests
+mypy backend
 ```
 
----
+Frontend:
 
-## Cross-Tenant Read
-
-Verify:
-
-```text
-Tenant A context
-        ↓
-Tenant B document
-        ↓
-Not accessible
+```powershell
+cd frontend
+npm run lint
+npm run test
+npm run build
 ```
 
----
+## Security Principles
 
-## Cross-Tenant Update
-
-Verify that Tenant A cannot update Tenant B resources.
-
----
-
-## Cross-Tenant Delete
-
-Verify that Tenant A cannot delete Tenant B resources.
-
----
-
-## Cross-Tenant Chunk/Vector Access
-
-Verify that Tenant A cannot retrieve Tenant B chunks or vector records.
-
-Tenant isolation must remain intact when retrieval-related structures are queried.
-
----
-
-## Application-Level Isolation
-
-Repeat tenant-isolation tests through the application/database access layer rather than relying only on direct SQL tests.
-
----
-
-## Deleted Resources
-
-Verify that deleted resources are not returned by tenant-scoped queries.
-
----
-
-## Audit Integrity
-
-Verify that security-relevant audit events contain appropriate:
-
-- tenant context
-- actor context
-- event type
-- timestamp
-
-without unnecessarily storing sensitive document contents or credentials.
-
----
-
-# Stage 1 Completion Gate
-
-Stage 1 cannot be marked complete until:
-
-- [ ] schema tests pass
-- [ ] constraint tests pass
-- [ ] index tests pass
-- [ ] database role security tests pass
-- [ ] RLS enablement tests pass
-- [ ] tenant-context tests pass
-- [ ] missing-context tests pass
-- [ ] same-tenant access tests pass
-- [ ] cross-tenant read tests pass
-- [ ] cross-tenant update tests pass
-- [ ] cross-tenant delete tests pass
-- [ ] chunk/vector isolation tests pass
-- [ ] application-level isolation tests pass
-- [ ] deleted-resource tests pass
-- [ ] audit integrity tests pass
-- [ ] migration succeeds on a clean database
-- [ ] Ruff passes
-- [ ] mypy passes
-- [ ] existing Stage 0 tests continue to pass
-- [ ] documentation matches implementation
-- [ ] Stage 1 evidence is captured
-
----
-
-# Later Security Testing
-
-Later stages will add testing for:
-
-- authentication
-- MFA
-- session security
-- refresh-token rotation
-- RBAC/ABAC
-- secure uploads
-- ingestion isolation
-- prompt injection
-- retrieval poisoning
-- LLM output leakage
-- rate limiting
-- abuse prevention
-- HTTPS
-- security headers
-- privacy/consent
-- production infrastructure
-- backup/restore
-- observability
+1. Tenant isolation is enforced at the database layer.
+2. Client-controlled identity is never authoritative.
+3. Missing tenant context fails closed.
+4. The application never uses a privileged database role.
+5. Unauthorized content must not enter the LLM context.
+6. Documentation must match the verified implementation.
+7. A later stage cannot be marked complete based only on planned code.

@@ -1,6 +1,13 @@
 import asyncio
+import sys
+
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from alembic import context
+from backend.db.base import Base
+from backend.db import models  # noqa: F401
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -25,8 +32,11 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection) -> None:
     context.configure(
         connection=connection,
-        target_metadata=None,
+        target_metadata=Base.metadata,
+        compare_type=True,
+        compare_server_default=True,
     )
+
 
     with context.begin_transaction():
         context.run_migrations()
