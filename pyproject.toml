@@ -1,6 +1,9 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "integration: requires the local PostgreSQL security test database",
+]
 
 [tool.ruff]
 line-length = 120

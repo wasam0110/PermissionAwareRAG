@@ -1,275 +1,228 @@
 # Architecture
 
-## Current Status
+## Status
 
-**Stage 0 — COMPLETE**
+- **Stage 0:** Complete
+- **Stage 1:** Database security boundary implemented; expanded acceptance coverage pending
 
-**Stage 1 — PREPARED / NOT YET IMPLEMENTED**
+## System Overview
 
-This document describes the current architecture and clearly separates implemented behavior from future-stage behavior.
-
----
-
-## Stage 0 Boundary
-
-The project is a standalone monorepo containing:
-
-- FastAPI backend
-- Next.js frontend
-- PostgreSQL 16 with pgvector
-- Redis 7
-- SQLAlchemy database layer
-- Alembic migration tooling
-- Automated testing and quality tooling
-
-Current architecture:
+Standalone monorepo:
 
 ```text
 Browser
    │
    ▼
-Next.js Frontend
+Next.js 14 Frontend
    │
    ▼
-FastAPI API
-   │
-   ├──────────────► PostgreSQL 16 + pgvector
-   │
-   └──────────────► Redis 7
+FastAPI Backend
+   ├──► PostgreSQL 16 + pgvector
+   └──► Redis 7
 ```
 
-Future architecture will add components such as object storage, background workers, embedding services, and an LLM provider.
+The project uses Python 3.11, FastAPI, SQLAlchemy, Alembic, PostgreSQL with pgvector, Redis, Next.js, TypeScript, pytest, Ruff, mypy, ESLint, and Vitest.
 
----
+Future stages may add object storage, background workers, embedding services, and an LLM provider.
 
-## Stage 0 Components
+## Frontend
 
-### Frontend
+The Next.js frontend uses the App Router, React, and TypeScript.
 
-The frontend is a Next.js 14 application using:
+The browser is untrusted. The frontend must never be authoritative for:
 
-- App Router
-- React
-- TypeScript
+- Tenant identity
+- User identity
+- Roles
+- Permissions
+- Document access
+- Database credentials or server-side secrets
 
-The frontend currently provides the application skeleton.
+Authentication and application features are implemented in later stages.
 
-It does not implement:
+## Backend
 
-- authentication
-- authorization
-- tenant selection
-- tenant authorization
-- security-sensitive backend credentials
+The FastAPI backend currently provides:
 
-Only browser-safe configuration may be exposed to the frontend.
-
-### Backend
-
-The backend is a FastAPI application.
-
-Stage 0 responsibilities include:
-
-- application startup/shutdown
-- configuration loading
+- Configuration loading
+- Application startup and shutdown
 - CORS configuration
-- correlation/request ID handling
-- structured logging
-- health endpoint
-- readiness endpoint
+- Correlation/request IDs
+- Structured logging
+- Health and readiness endpoints
 - PostgreSQL connectivity checks
 - Redis connectivity checks
+- SQLAlchemy database access
+- Transaction-local security-context helpers
 
-### PostgreSQL
+The backend uses `rag_app` for runtime database access and must not use the privileged bootstrap role.
 
-PostgreSQL 16 with pgvector provides the local relational database.
+## PostgreSQL
 
-Stage 0 deliberately creates no application schema.
+PostgreSQL 16 with pgvector is the primary relational and vector database.
 
-Stage 1 will introduce the application's tenant-aware security schema and RLS policies.
+Stage 1 provides:
 
-### Redis
+- Tenant-aware SQLAlchemy models
+- Alembic migrations
+- `pgcrypto` and `vector` extensions
+- Tenant-owned tables
+- Explicit tenant ownership
+- Row-Level Security
+- Forced Row-Level Security
+- Fail-closed tenant policies
+- Application-role grants
+- Cross-tenant isolation tests
 
-Redis 7 is configured as a local dependency.
-
-Redis is not an authorization source of truth.
-
-Authorization must ultimately be enforced by trusted backend/database controls.
-
----
-
-## Trust Boundaries
-
-### Browser
-
-The browser is untrusted.
-
-Client-controlled values must never be treated as authoritative for:
-
-- tenant identity
-- authorization
-- roles
-- permissions
-- access control
-
-### API
-
-The API is the future application authorization boundary.
-
-Stage 0 does not yet implement authentication or authorization.
-
-### PostgreSQL
-
-PostgreSQL becomes the tenant-isolation boundary in Stage 1 through Row-Level Security.
-
-The intended model is:
+The migration role is:
 
 ```text
-Trusted server-side identity
+rag_migration_admin
+```
+
+The runtime application role is:
+
+```text
+rag_app
+```
+
+`rag_app` is not a superuser, does not have `BYPASSRLS`, and is not the owner of application tables.
+
+## Redis
+
+Redis 7 is a local dependency for future caching, sessions, and background coordination.
+
+Redis is not an authorization source of truth. Authorization must be enforced by trusted backend and database controls.
+
+## Database Roles
+
+```text
+rag_dev
+    Local bootstrap/development administration
+
+rag_migration_admin
+    Alembic migrations and schema administration
+
+rag_app
+    Runtime backend access
+    No SUPERUSER
+    No BYPASSRLS
+```
+
+## Stage 1 Data Model
+
+```text
+Tenant
+ ├── Users
+ │    └── Roles
+ │         └── Permissions
+ ├── Collections
+ │    └── Documents
+ │         ├── Document ACLs
+ │         └── Chunks / embeddings
+ ├── Sessions
+ ├── Refresh Tokens
+ └── Audit Events
+```
+
+The current schema includes:
+
+```text
+tenants
+users
+roles
+permissions
+user_roles
+role_permissions
+collections
+documents
+document_acl
+chunks
+sessions
+refresh_tokens
+audit_events
+```
+
+## Trust and Tenant Boundaries
+
+```text
+Trusted server identity
         │
         ▼
-Tenant context
+Transaction-local tenant context
         │
         ▼
-Database transaction
+PostgreSQL transaction
         │
         ▼
-PostgreSQL RLS
+RLS policies
         │
         ▼
 Tenant-scoped data
 ```
 
-### Redis
-
-Redis is a dependency/cache.
-
-It must never become the authoritative source of authorization truth.
-
----
-
-## Database Roles
-
-The local database uses separate roles:
-
-```text
-rag_dev
-    │
-    └── Local development/bootstrap administration
-
-rag_migration_admin
-    │
-    └── Alembic migrations
-
-rag_app
-    │
-    └── Runtime application access
-```
-
-The runtime application role must not be a PostgreSQL superuser and must not have `BYPASSRLS`.
-
----
-
-## Stage 1 Architectural Direction
-
-Stage 1 will introduce the foundational multi-tenant data model:
-
-```text
-Tenant
-  │
-  ├── Users
-  │     └── Roles
-  │           └── Permissions
-  │
-  ├── Documents
-  │     └── Chunks
-  │
-  ├── Document ACLs
-  │
-  ├── Sessions
-  │
-  ├── Refresh Tokens
-  │
-  └── Audit Events
-```
-
-Every tenant-owned resource will have an explicit tenant relationship.
-
-PostgreSQL RLS will enforce tenant isolation independently of application query intent.
-
----
-
-## Tenant Context
-
-Stage 1 is expected to establish tenant context using a transaction-local PostgreSQL setting.
-
-Conceptually:
+Tenant context is set transaction-locally:
 
 ```sql
-SET LOCAL app.tenant_id = '<trusted-tenant-id>';
+SELECT set_config('app.tenant_id', '<trusted-tenant-uuid>', true);
 ```
 
-RLS policies can then compare the row's `tenant_id` against the current transaction context.
-
-Conceptually:
+RLS policies compare `tenant_id` to:
 
 ```sql
-tenant_id = current_setting('app.tenant_id', true)::uuid
+NULLIF(current_setting('app.tenant_id', true), '')::uuid
 ```
 
-`SET LOCAL` is important because pooled connections must not retain tenant context between requests.
+When context is missing, tenant-owned rows are invisible. Transaction-local settings prevent tenant context from leaking through pooled connections.
 
-The exact implementation will be finalized and tested during Stage 1.
+## RLS Boundary
 
----
-
-## Stage 1 Security Boundary
-
-Stage 1 establishes the first actual application security boundary:
+Tenant-owned tables use:
 
 ```text
-Application
-     │
-     ▼
-Trusted tenant context
-     │
-     ▼
-PostgreSQL transaction
-     │
-     ▼
-RLS policy
-     │
-     ├── Tenant A data → Tenant A only
-     │
-     └── Tenant B data → isolated
+ENABLE ROW LEVEL SECURITY
+FORCE ROW LEVEL SECURITY
 ```
 
-Missing tenant context must fail closed.
+The database enforces:
 
-Cross-tenant access must be denied at the database layer.
+- Tenant-specific reads
+- Tenant-specific inserts
+- Tenant-specific updates
+- Tenant-specific deletes
+- Tenant-specific document and chunk access
+- Fail-closed behavior without tenant context
 
----
+`role_permissions` derives tenant ownership through its related role. The `permissions` table contains global permission definitions.
 
-## Explicitly Deferred
+## Current Verification
 
-The following are not implemented in Stage 0:
+Implemented and verified:
 
-- Authentication
-- Login
-- Password hashing/verification
-- JWT
+- Database migration chain
+- Restricted application role
+- Non-bypass RLS configuration
+- Tenant-aware schema
+- RLS policies
+- Application grants
+- Missing-context filtering
+- Cross-tenant document read isolation
+- Cross-tenant update isolation
+- Cross-tenant delete isolation
+
+## Deferred Capabilities
+
+Later stages will implement:
+
+- Authentication and login
+- Password hashing and verification
+- JWT and refresh-token rotation
 - MFA
-- Authentication middleware
-- Authorization middleware
-- Document uploads
-- Ingestion workers
-- Embedding generation
-- Vector retrieval
-- RAG
+- Complete RBAC/ABAC enforcement
+- Secure uploads and malware scanning
+- Document ingestion and processing
+- Permission-aware retrieval
 - Prompt-injection defenses
-- LLM output filtering
-- Production Kubernetes
-- Production observability
-- Production backup/DR
-
-These capabilities will be implemented in later stages according to the implementation plan.
+- LLM output controls
+- Rate limiting and abuse prevention
+- Production deployment, observability, backups, and disaster recovery
